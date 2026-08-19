@@ -1,0 +1,247 @@
+{
+  "adapter": "none",
+  "note": "Constructed runs with known ground truth. Measures the telemetry, not any deployment's rates.",
+  "runs": 500,
+  "planted_rates": {
+    "tool_retry": 0.18,
+    "model_retry": 0.09,
+    "cached": 0.35,
+    "run_failure": 0.04
+  },
+  "prices_verified": "2026-08-11",
+  "redaction": [
+    {
+      "policy": "none",
+      "leaked": 4872,
+      "planted": 4872,
+      "leaked_pct": 100.0,
+      "surfaces_leaking": [
+        "assistant_message_event",
+        "choice_event",
+        "db_statement",
+        "exception_message",
+        "exception_stacktrace",
+        "http_url",
+        "input_messages_attr",
+        "output_messages_attr",
+        "tool_call_arguments",
+        "tool_result",
+        "user_message_event"
+      ],
+      "surfaces_clean": [],
+      "by_surface": {
+        "assistant_message_event": 479,
+        "choice_event": 479,
+        "db_statement": 587,
+        "exception_message": 87,
+        "exception_stacktrace": 87,
+        "http_url": 587,
+        "input_messages_attr": 500,
+        "output_messages_attr": 479,
+        "tool_call_arguments": 587,
+        "tool_result": 500,
+        "user_message_event": 500
+      },
+      "note": "no redaction: the control arm"
+    },
+    {
+      "policy": "prompt_and_completion",
+      "leaked": 3893,
+      "planted": 4872,
+      "leaked_pct": 79.9,
+      "surfaces_leaking": [
+        "assistant_message_event",
+        "choice_event",
+        "db_statement",
+        "exception_message",
+        "exception_stacktrace",
+        "http_url",
+        "tool_call_arguments",
+        "tool_result",
+        "user_message_event"
+      ],
+      "surfaces_clean": [
+        "input_messages_attr",
+        "output_messages_attr"
+      ],
+      "by_surface": {
+        "assistant_message_event": 479,
+        "choice_event": 479,
+        "db_statement": 587,
+        "exception_message": 87,
+        "exception_stacktrace": 87,
+        "http_url": 587,
+        "tool_call_arguments": 587,
+        "tool_result": 500,
+        "user_message_event": 500
+      },
+      "note": "redact the prompt and the completion. The instrumentation docs show these two attributes, so this is what most redactors are pointed at"
+    },
+    {
+      "policy": "all_content_attributes",
+      "leaked": 2806,
+      "planted": 4872,
+      "leaked_pct": 57.6,
+      "surfaces_leaking": [
+        "assistant_message_event",
+        "choice_event",
+        "db_statement",
+        "exception_message",
+        "exception_stacktrace",
+        "http_url",
+        "user_message_event"
+      ],
+      "surfaces_clean": [
+        "input_messages_attr",
+        "output_messages_attr",
+        "tool_call_arguments",
+        "tool_result"
+      ],
+      "by_surface": {
+        "assistant_message_event": 479,
+        "choice_event": 479,
+        "db_statement": 587,
+        "exception_message": 87,
+        "exception_stacktrace": 87,
+        "http_url": 587,
+        "user_message_event": 500
+      },
+      "note": "the above plus tool arguments and tool results, still attributes only"
+    },
+    {
+      "policy": "content_attributes_and_events",
+      "leaked": 1348,
+      "planted": 4872,
+      "leaked_pct": 27.7,
+      "surfaces_leaking": [
+        "db_statement",
+        "exception_message",
+        "exception_stacktrace",
+        "http_url"
+      ],
+      "surfaces_clean": [
+        "assistant_message_event",
+        "choice_event",
+        "input_messages_attr",
+        "output_messages_attr",
+        "tool_call_arguments",
+        "tool_result",
+        "user_message_event"
+      ],
+      "by_surface": {
+        "db_statement": 587,
+        "exception_message": 87,
+        "exception_stacktrace": 87,
+        "http_url": 587
+      },
+      "note": "adds the older convention's message events, which a redactor written against the newer revision never visits"
+    },
+    {
+      "policy": "every_string_in_the_span",
+      "leaked": 0,
+      "planted": 4872,
+      "leaked_pct": 0.0,
+      "surfaces_leaking": [],
+      "surfaces_clean": [
+        "assistant_message_event",
+        "choice_event",
+        "db_statement",
+        "exception_message",
+        "exception_stacktrace",
+        "http_url",
+        "input_messages_attr",
+        "output_messages_attr",
+        "tool_call_arguments",
+        "tool_result",
+        "user_message_event"
+      ],
+      "by_surface": {},
+      "note": "walk every string attribute and every event field. The only policy that covers the client and exception surfaces"
+    }
+  ],
+  "cost": {
+    "summed": {
+      "method": "spans_summed",
+      "traced_usd": 6.6691,
+      "true_usd": 6.7712,
+      "error_usd": -0.1021,
+      "error_pct": -1.51,
+      "n_traces": 500
+    },
+    "deduped": {
+      "method": "spans_deduped",
+      "traced_usd": 6.5172,
+      "true_usd": 6.7712,
+      "error_usd": -0.254,
+      "error_pct": -3.75,
+      "n_traces": 500
+    },
+    "gap": {
+      "cached_input_tokens": 510642,
+      "cached_underbill_usd": 0.1021,
+      "retry_input_tokens": 75950,
+      "retry_underbill_usd_if_deduped": 0.1519,
+      "note": "Cached input has no GenAI attribute and is excluded from gen_ai.usage.input_tokens, so those tokens are missing from the trace rather than mispriced. Both effects push the same way: a trace-derived total is too LOW."
+    }
+  },
+  "sampling": [
+    {
+      "policy": "keep_everything",
+      "kept": 500,
+      "kept_pct": 100.0,
+      "failures_kept": 21,
+      "failures_total": 21,
+      "failure_capture_pct": 100.0,
+      "buffers_traces": false,
+      "note": "the baseline: no sampling at all"
+    },
+    {
+      "policy": "head_10pct",
+      "kept": 43,
+      "kept_pct": 8.6,
+      "failures_kept": 1,
+      "failures_total": 21,
+      "failure_capture_pct": 4.8,
+      "buffers_traces": false,
+      "note": "decided before anything happened; keeps `rate` of everything, failures included"
+    },
+    {
+      "policy": "head_1pct",
+      "kept": 7,
+      "kept_pct": 1.4,
+      "failures_kept": 0,
+      "failures_total": 21,
+      "failure_capture_pct": 0.0,
+      "buffers_traces": false,
+      "note": "decided before anything happened; keeps `rate` of everything, failures included"
+    },
+    {
+      "policy": "tail_any_error_span",
+      "kept": 126,
+      "kept_pct": 25.2,
+      "failures_kept": 7,
+      "failures_total": 21,
+      "failure_capture_pct": 33.3,
+      "buffers_traces": true,
+      "note": "the intuitive tail policy, and the one that keeps retries rather than failures"
+    },
+    {
+      "policy": "tail_run_failed",
+      "kept": 21,
+      "kept_pct": 4.2,
+      "failures_kept": 21,
+      "failures_total": 21,
+      "failure_capture_pct": 100.0,
+      "buffers_traces": true,
+      "note": "keeps exactly the failures, and needs an outcome signal the trace does not contain"
+    }
+  ],
+  "promotion": {
+    "cases": 500,
+    "runnable": 0,
+    "blockers": {
+      "no expected output": 500,
+      "tool responses are not reproducible from the trace": 500
+    }
+  }
+}

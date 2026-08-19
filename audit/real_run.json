@@ -1,0 +1,334 @@
+{
+  "adapter": "anthropic",
+  "model": "claude-sonnet-5",
+  "runs": 20,
+  "elapsed_s": 88.3,
+  "prices_verified": "2026-08-11",
+  "note": "Cost from the trace uses ONLY gen_ai.usage.* attributes, which is everything the GenAI conventions define. Cost from the usage report uses the provider's cache counters, which have no convention attribute.",
+  "traced_usd": 0.020366,
+  "billed_usd": 0.036614,
+  "cache_read_tokens": 49001,
+  "identifier_in_output": 20,
+  "records": [
+    {
+      "run": 0,
+      "usage": {
+        "input_tokens": 144,
+        "output_tokens": 84,
+        "cache_creation_input_tokens": 2579,
+        "cache_read_input_tokens": 0
+      },
+      "traced_usd": 0.001128,
+      "billed_usd": 0.007575,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Tomas Nakamura (Account: CUS-586297), your order SO-4471 has a status of \"shipped.\" For detailed tracking information, please check the carrier's tracking link in your shipping confirmation email or contact us if you need further assistance."
+    },
+    {
+      "run": 1,
+      "usage": {
+        "input_tokens": 143,
+        "output_tokens": 67,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000956,
+      "billed_usd": 0.001472,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Elena Lindqvist (Account: CUS-365092), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let us know and we can assist further."
+    },
+    {
+      "run": 2,
+      "usage": {
+        "input_tokens": 143,
+        "output_tokens": 63,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000916,
+      "billed_usd": 0.001432,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Elena Whitfield (Account CUS-785427), your order SO-4471 currently has a status of \"shipped.\" If you need further tracking details, please let us know and we can look into it further."
+    },
+    {
+      "run": 3,
+      "usage": {
+        "input_tokens": 143,
+        "output_tokens": 65,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000936,
+      "billed_usd": 0.001452,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Aisha Whitfield (Account CUS-422988), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let me know and I can help further."
+    },
+    {
+      "run": 4,
+      "usage": {
+        "input_tokens": 139,
+        "output_tokens": 61,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000888,
+      "billed_usd": 0.001404,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Aisha Barros (Account CUS-429890), your order SO-4471 has a status of \"shipped.\" If you need more detailed tracking information, please let me know and I can help further."
+    },
+    {
+      "run": 5,
+      "usage": {
+        "input_tokens": 144,
+        "output_tokens": 91,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001198,
+      "billed_usd": 0.001714,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Aisha Nakamura (Account ID: CUS-315164), your order SO-4471 has a status of \"shipped.\" For specific tracking details or delivery dates, please check the carrier's tracking link if one was provided, or let us know if you'd like us to look into it further."
+    },
+    {
+      "run": 6,
+      "usage": {
+        "input_tokens": 139,
+        "output_tokens": 73,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001008,
+      "billed_usd": 0.001524,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Dana Osei (account CUS-955960), your order SO-4471 has a status of \"shipped.\" For detailed tracking information, please check the shipping confirmation email or let me know if you'd like me to look into it further."
+    },
+    {
+      "run": 7,
+      "usage": {
+        "input_tokens": 139,
+        "output_tokens": 82,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001098,
+      "billed_usd": 0.001614,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Ivan Osei (account CUS-107636), your order SO-4471 has a status of \"shipped.\" I don't have specific tracking or location details in your record, so please check the carrier tracking info from your shipping confirmation email for real-time updates."
+    },
+    {
+      "run": 8,
+      "usage": {
+        "input_tokens": 140,
+        "output_tokens": 66,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.00094,
+      "billed_usd": 0.001456,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Elena Mensah (Account: CUS-474879), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let us know and we can look into it further."
+    },
+    {
+      "run": 9,
+      "usage": {
+        "input_tokens": 141,
+        "output_tokens": 66,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000942,
+      "billed_usd": 0.001458,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Ivan Barros (Account: CUS-408164), your order SO-4471 is currently marked as \"shipped.\" If you need more detailed tracking information, please let us know and we can look into it further."
+    },
+    {
+      "run": 10,
+      "usage": {
+        "input_tokens": 146,
+        "output_tokens": 74,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001032,
+      "billed_usd": 0.001548,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Marcus Lindqvist (Account: CUS-812993), your order SO-4471 has a status of \"shipped.\" For more detailed tracking information, please let me know if you'd like me to escalate this to a specialist."
+    },
+    {
+      "run": 11,
+      "usage": {
+        "input_tokens": 144,
+        "output_tokens": 67,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000958,
+      "billed_usd": 0.001474,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Aisha Whitfield (Account CUS-676765), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let us know and we can look into it further."
+    },
+    {
+      "run": 12,
+      "usage": {
+        "input_tokens": 140,
+        "output_tokens": 86,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.00114,
+      "billed_usd": 0.001656,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Priya Mensah (Account CUS-361969), your order SO-4471 currently has a status of \"shipped.\" For specific tracking details or delivery timing, please check the carrier tracking link or let me know if you'd like us to escalate this for further assistance."
+    },
+    {
+      "run": 13,
+      "usage": {
+        "input_tokens": 143,
+        "output_tokens": 93,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001216,
+      "billed_usd": 0.001732,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Marcus Nakamura (Account ID: CUS-524523), your order SO-4471 has a status of \"shipped.\" I don't have further tracking details in your record, so please let me know if you'd like me to look into anything else."
+    },
+    {
+      "run": 14,
+      "usage": {
+        "input_tokens": 141,
+        "output_tokens": 66,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000942,
+      "billed_usd": 0.001458,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Tomas Osei (Account: CUS-816325), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let me know and I can look into it further."
+    },
+    {
+      "run": 15,
+      "usage": {
+        "input_tokens": 139,
+        "output_tokens": 61,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000888,
+      "billed_usd": 0.001404,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Elena Kaur (Account: CUS-980613), your order SO-4471 has a status of \"shipped.\" If you need further tracking details, please let us know and we can look into it further."
+    },
+    {
+      "run": 16,
+      "usage": {
+        "input_tokens": 141,
+        "output_tokens": 83,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001112,
+      "billed_usd": 0.001628,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Elena Mensah (Account CUS-500292), your order SO-4471 currently has a status of \"shipped.\" For detailed tracking information, please check the carrier's tracking link in your shipping confirmation email or let me know if you need further assistance."
+    },
+    {
+      "run": 17,
+      "usage": {
+        "input_tokens": 145,
+        "output_tokens": 80,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.00109,
+      "billed_usd": 0.001606,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Ruth Whitfield (Account: CUS-827217), your order SO-4471 currently shows a status of \"shipped.\" For detailed tracking information, please check the shipping carrier confirmation email or let us know if you need further assistance."
+    },
+    {
+      "run": 18,
+      "usage": {
+        "input_tokens": 141,
+        "output_tokens": 76,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.001042,
+      "billed_usd": 0.001558,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Tomas Petrov (account CUS-236482), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please reach out with your tracking number or contact the shipping carrier directly."
+    },
+    {
+      "run": 19,
+      "usage": {
+        "input_tokens": 143,
+        "output_tokens": 65,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2579
+      },
+      "traced_usd": 0.000936,
+      "billed_usd": 0.001452,
+      "identifier_in_output": true,
+      "patterns_matched_in_output": [
+        "\\bCUS-\\d{6}\\b"
+      ],
+      "output": "Hi Dana Lindqvist (Account CUS-656445), your order SO-4471 currently has a status of \"shipped.\" If you need more detailed tracking information, please let me know and I can help further."
+    }
+  ]
+}

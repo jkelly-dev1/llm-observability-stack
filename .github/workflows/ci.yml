@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel an in-flight run when the same branch is pushed again.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # One job, and it installs nothing but pytest. Every number in this
+  # repository's README, the redaction coverage, the cost drift, the sampling
+  # capture rates, the promotion blockers, is produced by code that imports
+  # only the standard library. The paid leg in scripts/real_run.py is the only
+  # thing that needs a vendor SDK, and it is never run in CI: it costs money
+  # and it needs a key. If the measurement ever starts needing a dependency,
+  # this job goes red, and that is the signal that the claim has stopped being
+  # true rather than a packaging inconvenience.
+  measurement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install pytest only
+        run: |
+          python -m pip install --upgrade pip
+          pip install "pytest>=8,<10"
+
+      # -rs prints skip reasons. There should be none here; if any appear, a
+      # test that was meant to run everywhere has quietly acquired a dependency.
+      - name: Tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: pytest -q -rs
+
+      # The whole free measurement, at a smaller corpus so CI stays fast. The
+      # README quotes the 500-run figures; this checks the code that produces
+      # them still runs, not that the numbers match at n=120.
+      - name: Offline measurement
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/offline_demo.py --runs 120
+
+      # A README is prose and drifts; audit/*.json is evidence and does not.
+      # This rebuilds each published figure from the JSON and requires the
+      # exact string, so a re-run that shifts a number fails loudly rather
+      # than leaving the document quietly wrong.
+      - name: README numbers match the shipped results
+        run: python scripts/check_readme_numbers.py

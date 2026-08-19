@@ -1,0 +1,6 @@
+# The measurement and the test suite need NOTHING outside the standard library.
+# This file exists for the paid leg only.
+#
+#   pip install -e ".[dev]"     tests
+#   pip install -e ".[real]"    scripts/real_run.py
+anthropic>=0.60

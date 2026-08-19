@@ -1,0 +1,18 @@
+[project]
+name = "llm-observability-stack"
+version = "0.1.0"
+description = "OpenTelemetry GenAI tracing for agent runs, and a measurement of what the trace copies, what it silently under-bills, and which failures it never keeps."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "James Kelly" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+# scripts/real_run.py only. Nothing in obs/ or tests/ imports these.
+real = ["anthropic>=0.60", "openai>=1.40"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
