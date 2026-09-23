@@ -12,11 +12,20 @@ rather than a bug in the arithmetic:
                  sums every span over-bills unless the failed attempt really
                  did consume input, which it did.
   PROMPT CACHING the provider reports cached input in a SEPARATE counter and
-                 excludes it from input_tokens. The GENAI conventions have no
-                 attribute for that counter, so those tokens are absent from
-                 the trace entirely, not mispriced but absent. Attribution from
-                 spans alone UNDER-bills every cached request. Measured on a
-                 real run: input_tokens 143, cache_read_input_tokens 2,579.
+                 excludes it from ITS OWN input_tokens. An instrumentation that
+                 copies that field onto gen_ai.usage.input_tokens therefore
+                 loses those tokens entirely: not mispriced but absent, and
+                 attribution from spans alone UNDER-bills every cached request.
+                 Measured on a real run: input_tokens 143,
+                 cache_read_input_tokens 2,579.
+                 Since 2026-08-20 the conventions define
+                 gen_ai.usage.cache_read.input_tokens, and the registry's note
+                 on gen_ai.usage.input_tokens says "This value SHOULD include
+                 all types of input tokens, including cached tokens". So the
+                 gap this module measures is a conformance gap: it is what
+                 happens when a collector passes the provider's field through
+                 unchanged, which is what the SDKs do and what
+                 scripts/real_run.py models.
   REASONING      on providers that bill thinking tokens as output, the output
                  count includes tokens no one ever sees. Nothing marks them.
 
@@ -164,8 +173,12 @@ def attribution_gap(traces, model: str = "claude-sonnet-5") -> dict:
         "retry_input_tokens": retry_input,
         "retry_underbill_usd_if_deduped": round(
             retry_input / 1e6 * p["in"], 4),
-        "note": "Cached input has no GenAI attribute and is excluded from "
-                "gen_ai.usage.input_tokens, so those tokens are missing from "
-                "the trace rather than mispriced. Both effects push the same "
-                "way: a trace-derived total is too LOW.",
+        "note": "The provider excludes cached input from its own "
+                "input_tokens, and an instrumentation that passes that field "
+                "through leaves those tokens missing from the trace rather "
+                "than mispriced. Since 2026-08-20 the conventions do define "
+                "gen_ai.usage.cache_read.input_tokens, and ask that "
+                "gen_ai.usage.input_tokens include cached tokens, so this is "
+                "a conformance gap rather than a coverage gap. Both effects "
+                "push the same way: a trace-derived total is too LOW.",
     }

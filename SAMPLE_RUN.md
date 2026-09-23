@@ -1,14 +1,23 @@
 # SAMPLE_RUN
 
-Every block below is captured output. Regenerate the free half with
-`scripts/offline_demo.py`; the paid half needs `--confirm` and an API key.
+Every block below is captured output, and the two free ones are reproduced by
+running the command shown above them. The paid block is captured output too,
+from the run on 2026-08-12 that cost $0.037; it is carried here and not
+regenerated, because re-running it spends money and the figures it reports are
+evidence in `audit/real_run.json`, which a reader should not have to pay to
+see. Regenerate the free half with `scripts/offline_demo.py`; the paid
+half needs `--confirm` and an API key.
+
+Only the elapsed times vary between runs. Every other character of the two free
+blocks is deterministic, because the corpus is seeded and the suite is
+stdlib-only.
 
 ## Tests
 
 ```
 $ .venv/bin/python -m pytest -q
-...........................                                              [100%]
-32 passed in 0.17s
+........................................                                 [100%]
+40 passed in 0.26s
 ```
 
 ## The offline measurement (free, no model called)
@@ -29,6 +38,7 @@ runs that actually failed: 21
   every_string_in_the_span              0/4872     0/11
 
   The policy most stacks ship -- prompt_and_completion -- leaves 9 of 11 surfaces intact:
+    assistant_message_event
     choice_event
     db_statement
     exception_message
@@ -58,19 +68,21 @@ runs that actually failed: 21
   runnable cases: 0 of 500
       500  no expected output
       500  tool responses are not reproducible from the trace
+
+wrote audit/offline.json
 ```
 
 Read the four blocks together, because each one is a different way the same
 trace is not what it looks like:
 
   1 the identifier survives on 9 of 11 surfaces under the policy most stacks
-  ship, and the two conventions, attributes and events, are why 2 the cost
-  derived from the trace is too LOW, and both effects push that way 3 head
-  sampling keeps 4.8% of the failures; the intuitive tail policy keeps a quarter
-  of everything and still misses two thirds of them 4 nothing promotes into a
-  runnable eval case
+  ship, and the two revisions of the content convention, attributes and events,
+  are why 2 the cost derived from the trace is too LOW, and both effects push
+  that way 3 head sampling keeps 4.8% of the failures; the intuitive tail
+  policy keeps a quarter of everything and still misses two thirds of them
+  4 nothing promotes into a runnable eval case
 
-## The paid run (20 calls, claude-sonnet-5, $0.037)
+## The paid run (20 calls, claude-sonnet-5, $0.037, captured 2026-08-12)
 
 ```
 $ ENV_FILE=~/.secrets/ai.env .venv/bin/python scripts/real_run.py --confirm
@@ -94,12 +106,23 @@ identifier reproduced in the model's own answer: 20/20
 wrote audit/real_run.json
 ```
 
-This run corrected the repository; it did not confirm it. The offline model had
-treated a cache hit as a discount applied to tokens that were still in the
-trace, which made a trace-derived cost too HIGH. A real provider excludes the
-cached prefix from `input_tokens` and reports it in a counter the GenAI
-conventions do not define, so the tokens are absent rather than mispriced and
-the error runs the other way: by 44% here.
+All 20 of the 20 requested runs succeeded, so the 20/20 above has a denominator
+of runs that actually COMPLETED, not of runs that were asked for. A run that
+errored would be excluded from it and reported separately, because two API
+failures are not two non-reproductions.
+
+This run sets the direction of the cost result. Treating a cache hit as a
+discount on tokens still in the trace would make a trace-derived cost too high.
+A real provider excludes the cached prefix from the `input_tokens` it reports,
+and the instrumentation copies that field onto `gen_ai.usage.input_tokens`
+unchanged, so the tokens are absent rather than mispriced and the error runs
+the other way: by 44% here.
+
+`gen_ai.usage.cache_read.input_tokens` was added to the GenAI registry on
+2026-08-20, eight days after this run, and the same change asked that
+`gen_ai.usage.input_tokens` include cached tokens. So the 44% measures a
+collector that does not do what the conventions ask, which is what the SDKs
+ship. See the README's cost section.
 
 Per call, the numbers that make it concrete:
 
@@ -111,9 +134,9 @@ Per call, the numbers that make it concrete:
 
 The conventional attribute saw 143 of the 2,722 tokens run 001 processed.
 
-And the check that could have embarrassed the redaction result: the model
-reproduced the customer's account identifier in its own answer 20 times out of
-20. The output surface in the redaction table is real, not an assumption.
+The check that could have embarrassed the redaction result: the model
+reproduced the customer's account identifier in its own answer 20 times out
+of 20. The output surface in the redaction table is real, not an assumption.
 
 Sample answer, unedited:
 

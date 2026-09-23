@@ -10,13 +10,24 @@ when nobody is looking at it: where the customer's data ends up, whether the
 cost figure derived from it is true, and whether the run you actually needed is
 still in the store when you go looking.
 
-Every `gen_ai.*` name here is one the GenAI semantic conventions specify, and
-`tests/test_conventions.py` pins the literal spelling of each. Four attributes
-here are not GenAI names, `url.full`, `db.query.text`, `exception.message`,
-`exception.stacktrace`, because the tool leg is an ordinary HTTP or database
-client, and those surfaces carry customer data as often as the prompt does.
-Leaving them out is how a redaction measurement flatters itself. The measurement
-itself uses only the standard library.
+The `gen_ai.*` names here come from two revisions of the GenAI semantic
+conventions, and `tests/test_conventions.py` pins the literal spelling of each
+in the group it belongs to. Its attributes are current registry names. The four per-message events are not: semantic-conventions
+v1.37.0 (2025-08-25) removed `gen_ai.system.message`, `gen_ai.user.message`,
+`gen_ai.assistant.message` and `gen_ai.choice`, directing instrumentations to
+`gen_ai.input.messages` and `gen_ai.output.messages` instead. They are modeled
+here anyway, because removing a name from a specification does not remove it
+from the libraries already deployed or the traces already in your store, and a
+redactor pointed at the current shape never visits the other one. That is the
+whole finding, so renaming those four constants to the current shape would
+delete it.
+
+Four more attributes here are not GenAI names at all, `url.full`,
+`db.query.text`, `exception.message`, `exception.stacktrace`, because the tool
+leg is an ordinary HTTP or database client, and those surfaces carry customer
+data as often as the prompt does. Leaving them out is how a redaction
+measurement flatters itself. The measurement itself uses only the standard
+library.
 
 ## The one-sentence result
 
@@ -24,9 +35,10 @@ Redacting the prompt and the completion, what the instrumentation docs show you,
 and what most stacks ship, leaves the same customer identifier readable on 9
 of 11 surfaces in the same trace.
 
-And a second one, from 20 real calls: cost computed from the conventional
-attributes was 44% below the provider's own usage report, because a cached
-prompt prefix is reported in a counter the conventions do not define. Measured:
+A second result, from 20 real calls: cost computed from the conventional
+attributes was 44% below the provider's own usage report, because the provider
+excludes a cached prompt prefix from its own `input_tokens` and the
+instrumentation copies that field straight onto the span. Measured:
 `input_tokens 143`, `cache_read_input_tokens 2,579`.
 
 ## Why a trace is a second copy of your prompt data
@@ -36,10 +48,11 @@ end up, and which of those places a redactor is usually pointed at:
 
 | surface | what puts it there | reached by "redact the prompt"? |
 |---|---|---|
-| `gen_ai.input.messages` | newer convention, content in an attribute | yes |
+| `gen_ai.input.messages` | current revision, content in an attribute | yes |
 | `gen_ai.output.messages` | the model quoting the customer back | yes |
-| `gen_ai.user.message` event | **older convention, same text, different place** | no |
-| `gen_ai.choice` event | older convention, the answer | no |
+| `gen_ai.user.message` event | **superseded revision, same text, different place** | no |
+| `gen_ai.choice` event | superseded revision, the answer | no |
+| `gen_ai.assistant.message` event | the answer a THIRD time, superseded revision | no |
 | `gen_ai.tool.call.arguments` | what the agent passed to the lookup tool | no |
 | `gen_ai.tool.call.result` | the record that came back | no |
 | `url.full` | the tool's own HTTP call, id in the query string | no |
@@ -47,10 +60,17 @@ end up, and which of those places a redactor is usually pointed at:
 | `exception.message` | the failure text, quoting the input | no |
 | `exception.stacktrace` | frame arguments, quoting it again | no |
 
-The two conventions are the trap. Content capture moved from span *events* to
-span *attributes* between revisions. Both are deployed. A redactor written
+Eleven rows, which is the same eleven `obs/runs.PLANTED_SURFACES` carries and
+the same eleven the `9/11` denominator counts;
+`scripts/check_readme_numbers.py` fails if this table and that tuple disagree.
+
+The two revisions are the trap. Content capture moved from span events to
+span attributes, and the events were then removed from the conventions
+altogether in v1.37.0. Both shapes are still deployed, because a specification
+change does not reach the instrumentation already running. A redactor written
 against one never visits the other, and it is not obvious from either the code
-or the spec that a second copy exists.
+or the current spec that a second copy exists, because the spec no longer
+even mentions the older one.
 
 Measured over 500 runs, 4,872 planted identifiers:
 
@@ -80,9 +100,10 @@ not establish how often an unprompted assistant would put it there.
 ## The cost figure derived from a trace is too low
 
 Someone asks what a feature costs. The trace is the only per-request record, so
-the number gets computed from spans. The GenAI conventions define
-`gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`, and nothing else
-about usage.
+the number gets computed from spans. Every GenAI instrumentation emits
+`gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`, and an
+attribution built on those two is what a reader of the instrumentation docs
+writes.
 
 ```
 20 real calls, claude-sonnet-5, a cached system prefix:
@@ -92,11 +113,24 @@ about usage.
   cache read tokens           49,001
 ```
 
-A provider reports a cache hit in a separate counter and excludes it from
-`input_tokens`. There is no convention attribute for that counter, so those
-tokens are not mispriced in the trace; they are absent from it. On a request
-whose prefix is cached, the conventional attribute saw 143 of the 2,722 tokens
-the request actually processed.
+A provider reports a cache hit in a separate counter and excludes it from its
+own `input_tokens`. An instrumentation that copies that field onto
+`gen_ai.usage.input_tokens` ships a number the provider never meant as a total,
+so those tokens are not mispriced in the trace; they are absent from it. On a
+request whose prefix is cached, the conventional attribute saw 143 of the 2,722
+tokens the request actually processed.
+
+The conventions have a place for that counter.
+`gen_ai.usage.cache_read.input_tokens` was added to the GenAI registry on
+2026-08-20, eight days after the paid run above, and the same change added a
+note to `gen_ai.usage.input_tokens`: *"This value SHOULD include all types of
+input tokens, including cached tokens."*
+
+The finding is therefore a conformance gap, not a coverage gap. A collector
+that does what the conventions ask, emitting the cache counter and counting
+cached tokens inside `input_tokens`, closes it. `scripts/real_run.py` does what the SDKs
+actually do instead, which is to pass `usage.input_tokens` through unchanged,
+and that is what produces the 44%.
 
 Offline, on 500 constructed runs, the same effect is worth -1.5%, and deduping
 retried calls, the obvious correction, makes it -3.8%, because those attempts
@@ -104,11 +138,10 @@ really were billed. The spread between -1.5% and -44% is entirely how much of
 the prompt is a cached shared prefix, which is a property of your agent rather
 than of your tracing.
 
-This repository had the sign backwards until the paid run. The offline model
-treated a cache hit as a discount on tokens still present in the trace, which
-made attribution over-bill. Twenty real calls said otherwise. The generator
-now models what the provider does, the tests assert the corrected direction, and
-the wrong version is written up in the bug log rather than quietly deleted.
+The intuitive model treats a cache hit as a discount on tokens still present
+in the trace, which would make attribution over-bill. Twenty real calls show
+the opposite direction, so the generator models what the provider does and the
+tests assert that direction.
 
 ## The sampling policy keeps the runs you did not need
 
@@ -177,21 +210,25 @@ be replayed as the run that happened. That tension is reported, not resolved.
 | The failure this stack exists to catch leaves no error span on the answering call | `tests/test_runs.py::test_the_silent_failure_leaves_no_error_span` |
 | A failed run really does answer with the wrong customer's data | `tests/test_runs.py::test_a_failed_run_really_answers_with_the_wrong_data` |
 | The scrubber removes every pattern it claims to | `tests/test_redact.py::test_scrub_removes_each_pattern_it_claims_to` |
-| The unredacted control leaks on all ten surfaces, so every policy is a difference from a real baseline | `tests/test_redact.py::test_the_unredacted_control_leaks_every_surface` |
-| Redacting every string in the span reaches all ten, so none is unreachable by construction | `tests/test_redact.py::test_redacting_everything_leaks_nothing` |
-| Redacting the prompt and the completion never visits the event carrying the same text under the older revision | `tests/test_redact.py::test_the_prompt_only_policy_misses_the_event_convention` |
+| The unredacted control leaks on all eleven surfaces, so every policy is a difference from a real baseline | `tests/test_redact.py::test_the_unredacted_control_leaks_every_surface` |
+| Redacting every string in the span reaches all eleven, so none is unreachable by construction | `tests/test_redact.py::test_redacting_everything_leaks_nothing` |
+| Redacting the prompt and the completion never visits the event carrying the same text under the superseded revision | `tests/test_redact.py::test_the_prompt_only_policy_misses_the_event_convention` |
 | A broader policy leaks a strict subset of a narrower one, with no crossover | `tests/test_redact.py::test_broader_policies_leak_a_strict_subset` |
 | The URL, the SQL and both exception surfaces are reached by no content-shaped policy | `tests/test_redact.py::test_client_and_exception_surfaces_need_the_widest_policy` |
-| Coverage is graded per surface, not per span | `tests/test_redact.py::test_residual_grades_the_surface_and_not_the_span` (mutation-checked: the per-span version made three different policies produce identical numbers) |
+| Coverage is graded per surface, not per span | `tests/test_redact.py::test_residual_grades_the_surface_and_not_the_span` (mutation-checked: grade the whole span instead of the surface and it fails) |
 | A surface name that does not exist is an error, not a silent pass | `tests/test_redact.py::test_an_unknown_surface_is_an_error_not_a_pass` |
 | Every policy is scored against the same denominator | `tests/test_redact.py::test_every_policy_is_measured_against_the_same_denominator` |
-| Every `gen_ai.*` attribute is spelled the way the conventions spell it, and the four non-GenAI ones are not GenAI names | `tests/test_conventions.py` (mutation-checked: rename any constant to a deprecated spelling and it fails) |
+| Every current `gen_ai.*` attribute is spelled the way the conventions spell it, and the four non-GenAI ones are not GenAI names | `tests/test_conventions.py` (mutation-checked: rename any constant to a deprecated spelling and it fails) |
+| The four superseded event names still carry the spelling the revision that had them used, so renaming them to the current shape cannot silently delete the finding | `tests/test_conventions.py::test_every_superseded_event_name_matches_the_revision_that_had_it` (mutation-checked: point `EVENT_USER` at `gen_ai.input.messages` and it fails) |
+| No `gen_ai.*` constant the model emits escapes both groups, so a name cannot go unpinned by living only as a bare literal | `tests/test_conventions.py::test_every_genai_name_the_model_emits_is_in_one_of_the_three_groups` (mutation-checked: rename `gen_ai.tool.call.arguments` and it fails) |
+| `gen_ai.system` and the other deprecated spellings appear nowhere in the module as well as nowhere in the test's own table | `tests/test_conventions.py::test_no_genai_name_is_a_deprecated_spelling` |
 | The silent failure leaves no error span, selected by position rather than by status so the assertion cannot hold vacuously | `tests/test_runs.py::test_the_silent_failure_leaves_no_error_span` (mutation-checked: mark the answering span ERROR and it fails) |
-| Summing spans under-bills, because the cached tokens are absent from the trace rather than mispriced in it | `tests/test_cost_sampling_promote.py::test_summing_spans_underbills_because_cached_tokens_are_absent` (the direction the paid run established, after this repository had the sign backwards) |
+| Summing spans under-bills, because the cached tokens are absent from the trace, not mispriced in it | `tests/test_cost_sampling_promote.py::test_summing_spans_underbills_because_cached_tokens_are_absent` (the direction the paid run established) |
 | Put the cached tokens back into `input_tokens` and the finding inverts, so the provider semantics are pinned | `tests/test_cost_sampling_promote.py::test_cached_tokens_are_absent_from_the_span_and_not_discounted_in_it` |
-| Deduping retried calls, the obvious correction, moves the total further from the truth | `tests/test_cost_sampling_promote.py::test_deduping_retries_makes_the_error_worse_not_better` (mutation-checked on a tempting fix) |
+| Deduping retried calls, the obvious correction, moves the total further from the truth | `tests/test_cost_sampling_promote.py::test_deduping_retries_makes_the_error_worse_not_better` (mutation-checked: make the dedupe a no-op and it fails) |
 | Retried model calls really are in the trace twice, each carrying tokens that were billed | `tests/test_cost_sampling_promote.py::test_retried_model_calls_are_really_in_the_trace_twice` |
-| An unpriced model is refused rather than guessed at | `tests/test_cost_sampling_promote.py::test_an_unpriced_model_is_refused` |
+| An unpriced model is refused, not guessed at | `tests/test_cost_sampling_promote.py::test_an_unpriced_model_is_refused` |
+| The paid run sends nothing without `--confirm`, exits 2 over its cost cap, and refuses to write over an existing results file | `tests/test_real_run.py::test_the_dry_run_sends_nothing_and_exits_zero`, `::test_the_cost_cap_refuses_with_exit_two`, `::test_a_confirmed_run_refuses_to_overwrite_existing_evidence`, `::test_the_default_output_is_a_new_file_not_the_shipped_evidence` (mutation-checked: drop the refusal, or restore a fixed `--out` default, and they fail) |
 | Head sampling keeps its rate of the failures and no more, because it decides before anything has gone wrong | `tests/test_cost_sampling_promote.py::test_head_sampling_keeps_its_rate_of_failures_and_no_more` |
 | "Keep any trace with an error span" is dominated by successful retried runs and still misses failures | `tests/test_cost_sampling_promote.py::test_the_intuitive_tail_policy_keeps_retries_rather_than_failures` |
 | Only a policy keyed on the run outcome captures every failure, and it has to buffer | `tests/test_cost_sampling_promote.py::test_only_an_outcome_signal_captures_every_failure` |
@@ -218,7 +255,7 @@ established are pinned by the two cost tests above.
 
 ```
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m pytest -q                              # 32 tests
+.venv/bin/python -m pytest -q                              # 40 tests
 .venv/bin/python scripts/offline_demo.py --runs 500 --json audit/offline.json
 ```
 

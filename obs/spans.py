@@ -3,23 +3,33 @@
 Why a model and not the SDK. The measurement here is about where content ends
 up in a trace, and that is a property of the conventions, not of any exporter.
 Modeling it in the standard library keeps the measurement exact, free, and
-runnable without an OTLP collector, and every attribute name below is the one
-the convention specifies, so a reader can check the claim against the spec
-rather than against this code. Scripts/real_run.py emits the same shape from
-real API responses.
+runnable without an OTLP collector, and a reader can check every name below
+against the spec rather than against this code. Scripts/real_run.py emits the
+same shape from real API responses.
 
-The part that matters for this repository. The conventions capture message
-content in TWO different places depending on which revision a library targets:
+The part that matters for this repository. Message content has been captured in
+TWO different places, and WHICH ONE a library emits depends on the revision it
+was written against:
 
-    older revision   span EVENTS: gen_ai.user.message, gen_ai.assistant.message,
-                     gen_ai.choice, each with a `content` field
-    newer revision   span ATTRIBUTES: gen_ai.input.messages,
-                     gen_ai.output.messages
+    SUPERSEDED     span EVENTS: gen_ai.system.message, gen_ai.user.message,
+    revision       gen_ai.assistant.message, gen_ai.choice, each with a
+                   `content` field
+    CURRENT        span ATTRIBUTES: gen_ai.input.messages,
+    revision       gen_ai.output.messages
 
-Both are opt-in, both are widely deployed, and a process that walks one of them
-does not see the other. That is not a subtlety of this model; it is the fact
-the redaction measurement rests on, and it is why a redactor can be correct,
-tested, and still leak everything.
+The event names are no longer in the conventions, and this model emits them
+anyway, because that is the finding: semantic-conventions v1.37.0 (released
+2025-08-25) removed all four, directing instrumentations to the two attributes
+instead. Removing a name from a specification does not remove it from the
+libraries already deployed, the collectors already parsing it, or the backends
+already storing it, so a trace arriving today can carry either shape and a
+redactor pointed at one does not see the other.
+
+The two groups below are therefore labeled separately and tested separately:
+tests/test_conventions.py asserts the current names against the current
+registry and asserts the superseded names are spelled the way the revision
+that had them spelled them. Renaming the events to the current shape would
+delete the finding.
 """
 
 from __future__ import annotations
@@ -27,8 +37,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterator
 
-# -- attribute names, straight from the convention ---------------------------
-SYSTEM = "gen_ai.system"
+# -- attribute names, straight from the current registry ---------------------
+# The provider identity. semantic-conventions v1.37.0 renamed `gen_ai.system`
+# to this, so `gen_ai.system` is a deprecated spelling, listed as one in
+# tests/test_conventions.py and not emitted here.
+PROVIDER_NAME = "gen_ai.provider.name"
 OPERATION = "gen_ai.operation.name"
 REQUEST_MODEL = "gen_ai.request.model"
 RESPONSE_MODEL = "gen_ai.response.model"
@@ -38,16 +51,24 @@ USAGE_INPUT = "gen_ai.usage.input_tokens"
 USAGE_OUTPUT = "gen_ai.usage.output_tokens"
 TOOL_NAME = "gen_ai.tool.name"
 TOOL_CALL_ID = "gen_ai.tool.call.id"
+# The tool leg's content. These two are current registry names, and they are
+# constants because a name that appears only as a literal is one
+# tests/test_conventions.py cannot pin.
+TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments"
+TOOL_CALL_RESULT = "gen_ai.tool.call.result"
 
-# Content capture, newer revision: attributes.
+# Content capture, current revision: attributes.
 INPUT_MESSAGES = "gen_ai.input.messages"
 OUTPUT_MESSAGES = "gen_ai.output.messages"
 
-# Content capture, older revision: events.
+# Content capture, superseded revision: events. Removed from the conventions in
+# v1.37.0 and still emitted by deployed instrumentations, so they are modeled
+# here. See the module docstring.
 EVENT_USER = "gen_ai.user.message"
 EVENT_SYSTEM = "gen_ai.system.message"
 EVENT_ASSISTANT = "gen_ai.assistant.message"
 EVENT_CHOICE = "gen_ai.choice"
+# Not a GenAI name: the general-purpose exception event.
 EVENT_EXCEPTION = "exception"
 
 # Operations, from the convention's enum.

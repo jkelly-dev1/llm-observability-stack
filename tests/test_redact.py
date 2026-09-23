@@ -28,7 +28,7 @@ def test_scrub_removes_each_pattern_it_claims_to():
 
 
 def test_the_unredacted_control_leaks_every_surface():
-    """THE VACUITY CHECK. If the control arm did not leak everywhere, a policy
+    """The vacuity check. If the control arm did not leak everywhere, a policy
     could score well by measuring nothing. Every result in this repository is
     a difference from this row."""
     assert _leaking_surfaces(NONE) == set(PLANTED_SURFACES)
@@ -43,8 +43,8 @@ def test_redacting_everything_leaks_nothing():
 
 def test_broader_policies_leak_a_strict_subset():
     """Each policy is pointed at everything the previous one was, plus more, so
-    its leaking surfaces must be a subset. A crossover would mean a policy
-    stopped covering something it used to."""
+    its leaking surfaces must be a subset. A crossover would mean a broader
+    policy misses a surface a narrower one covers."""
     order = [NONE, PROMPT_ONLY, CONTENT_ATTRS, CONTENT_AND_EVENTS, EVERYTHING]
     leaks = [_leaking_surfaces(p) for p in order]
     for narrower, broader in zip(leaks, leaks[1:]):
@@ -54,7 +54,7 @@ def test_broader_policies_leak_a_strict_subset():
 def test_the_prompt_only_policy_misses_the_event_convention():
     """The headline claim, asserted rather than narrated: a redactor written
     against gen_ai.input.messages never visits the event that carries the same
-    text under the older revision."""
+    text under the superseded revision."""
     leaking = _leaking_surfaces(PROMPT_ONLY)
     assert "input_messages_attr" not in leaking
     assert "user_message_event" in leaking
@@ -71,10 +71,10 @@ def test_client_and_exception_surfaces_need_the_widest_policy():
 
 
 def test_residual_grades_the_surface_and_not_the_span():
-    """MUTATION CHECK for the defect this measurement actually had. The first
-    version asked 'does this span still contain the customer anywhere?', so a
-    leak on one surface marked every other planted surface in the same span as
-    leaking too, and three different policies produced identical numbers.
+    """Coverage is graded per surface. Asking "does this span still contain
+    the customer anywhere?" would mark every planted surface in a span as
+    leaking when any one of them does, and different policies would produce
+    identical numbers.
 
     The plan span carries two surfaces. Redact one; the other must still be
     reported, and the redacted one must not be.
@@ -91,6 +91,36 @@ def test_an_unknown_surface_is_an_error_not_a_pass():
     span = corpus(1)[0].spans[0]
     with pytest.raises(KeyError):
         _surface_text(span, "surface_that_does_not_exist")
+
+
+def test_a_planted_span_that_is_gone_is_an_error_not_a_clean_surface():
+    """The same principle as the test above, for a planted span that is gone.
+
+    A planted item whose span has been dropped must not count toward the
+    denominator while never counting toward the leaks, or the surface scores
+    as redacted because nobody looked at it. `residual()` raises instead.
+
+    No shipped path drops a span (policies mutate in place and sampling never
+    feeds `residual()`); this pins that a measurement which cannot examine its
+    target says so.
+    """
+    trace = copy.deepcopy(corpus(1)[0])
+    leaking_before = len(residual(trace))
+    assert leaking_before, (
+        "the unredacted control must leak, or dropping a span proves nothing")
+
+    victim = trace.truth["planted"][0]["span_id"]
+    trace.spans = [s for s in trace.spans if s.span_id != victim]
+    still_claimed = [p for p in trace.truth["planted"]
+                     if p["span_id"] == victim]
+    assert still_claimed, "the truth must still claim the span we removed"
+
+    # Matched on the message as well as the type: `residual` reads
+    # `trace.truth["identity"]` and `trace.truth["planted"]` too, so a bare
+    # `raises(KeyError)` would stay green if this test's setup simply produced
+    # a malformed truth and the span lookup never happened.
+    with pytest.raises(KeyError, match="not in trace"):
+        residual(trace)
 
 
 def test_every_policy_is_measured_against_the_same_denominator():

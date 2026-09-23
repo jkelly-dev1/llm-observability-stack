@@ -3,9 +3,10 @@
 The claim this module exists to measure. "We redact PII before it reaches the
 traces" is a sentence every team says, and it is true of the place they looked
 at when they wrote the redactor. A trace of one agent turn carries the same
-customer identity in eleven places (obs/runs.PLANTED_SURFACES), spread across two
-different content-capture conventions, an HTTP client's URL, a database
-client's statement text, and an exception message that quotes the input back.
+customer identity in eleven places (obs/runs.PLANTED_SURFACES), spread across
+two different content-capture revisions of the same convention, an HTTP
+client's URL, a database client's statement text, and an exception message that
+quotes the input back.
 
 A Policy is a set of surfaces it visits, not a set of patterns it matches.
 That is the design decision this module makes, and the one worth arguing with.
@@ -13,9 +14,9 @@ A regex that finds every email in the world still leaks if it is only ever
 handed `gen_ai.input.messages`. So each policy below declares the span fields
 it walks, and the measurement reports residual identifiers per surface.
 
-Nothing here is a novel redaction technique. The matcher is deliberately a
-plain, strong regex set: the finding is about coverage, and a weak matcher
-would confound the two.
+Nothing here is a novel redaction technique. The matcher is a plain, strong
+regex set: the finding is about coverage, and a weak matcher would confound
+the two.
 """
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ from dataclasses import dataclass
 
 from .spans import (DB_STATEMENT, EVENT_ASSISTANT, EVENT_CHOICE, EVENT_EXCEPTION,
                     EVENT_USER, EXCEPTION_MESSAGE, EXCEPTION_STACKTRACE,
-                    HTTP_URL, INPUT_MESSAGES, OUTPUT_MESSAGES, Span, Trace)
+                    HTTP_URL, INPUT_MESSAGES, OUTPUT_MESSAGES,
+                    TOOL_CALL_ARGUMENTS, TOOL_CALL_RESULT, Span, Trace)
 
 MASK = "[REDACTED]"
 
@@ -40,7 +42,7 @@ PATTERNS = (
 # Every attribute key that can carry content, and the two events, so that a
 # policy can be defined by which of these it is pointed at.
 ATTR_CONTENT_KEYS = (INPUT_MESSAGES, OUTPUT_MESSAGES,
-                     "gen_ai.tool.call.arguments", "gen_ai.tool.call.result")
+                     TOOL_CALL_ARGUMENTS, TOOL_CALL_RESULT)
 ATTR_CLIENT_KEYS = (HTTP_URL, DB_STATEMENT)
 EVENT_CONTENT_FIELDS = ("content",)
 EVENT_ERROR_FIELDS = (EXCEPTION_MESSAGE, EXCEPTION_STACKTRACE)
@@ -105,8 +107,8 @@ CONTENT_ATTRS = Policy(
 CONTENT_AND_EVENTS = Policy(
     "content_attributes_and_events",
     attr_keys=ATTR_CONTENT_KEYS, event_content=True,
-    note="adds the older convention's message events, which a redactor written "
-         "against the newer revision never visits")
+    note="adds the superseded revision's message events, which a redactor "
+         "written against the current one never visits")
 
 EVERYTHING = Policy(
     "every_string_in_the_span",
@@ -125,8 +127,8 @@ POLICIES = (NONE, PROMPT_ONLY, CONTENT_ATTRS, CONTENT_AND_EVENTS, EVERYTHING)
 SURFACE_LOCATORS = {
     "input_messages_attr": ("attr", INPUT_MESSAGES),
     "output_messages_attr": ("attr", OUTPUT_MESSAGES),
-    "tool_call_arguments": ("attr", "gen_ai.tool.call.arguments"),
-    "tool_result": ("attr", "gen_ai.tool.call.result"),
+    "tool_call_arguments": ("attr", TOOL_CALL_ARGUMENTS),
+    "tool_result": ("attr", TOOL_CALL_RESULT),
     "http_url": ("attr", HTTP_URL),
     "db_statement": ("attr", DB_STATEMENT),
     "user_message_event": ("event", EVENT_USER, "content"),
@@ -159,6 +161,13 @@ def residual(trace: Trace) -> list[dict]:
     Grades against `trace.truth["planted"]`, so a leak is reported as "this
     identifier, in this span, on this surface" rather than as a count. A count
     is what makes a redaction result unarguable and useless.
+
+    A planted item whose span is gone is an error, not a clean surface.
+    Skipping it would count the surface toward the denominator and never
+    toward the leaks, so it would score as redacted because nobody looked at
+    it. `_surface_text` refuses an unknown surface name for the same reason:
+    a measurement that cannot examine its target says so instead of
+    reporting a result.
     """
     out = []
     by_id = {s.span_id: s for s in trace.spans}
@@ -166,7 +175,11 @@ def residual(trace: Trace) -> list[dict]:
     for item in trace.truth["planted"]:
         span = by_id.get(item["span_id"])
         if span is None:
-            continue
+            raise KeyError(
+                f"planted item names span {item['span_id']!r}, which is not in "
+                f"trace {trace.trace_id!r}. The ground truth and the spans have "
+                "drifted apart; scoring this surface as clean would credit a "
+                "policy for a surface nobody examined.")
         text = _surface_text(span, item["surface"])
         if identity["email"] in text or identity["customer_id"] in text:
             out.append(item)

@@ -11,7 +11,7 @@ trace records what the model SAID, not what it should have said. Promoting a
 trace gives you a case whose expectation is the very output you are trying to
 stop reproducing.
 
-So this module does two things and refuses to do a third: it extracts what the
+This module therefore does two things and refuses to do a third: it extracts what the
 trace really contains, it states exactly which fields are missing, and it will
 not invent an expectation. `promote()` returns a case with
 `expected_output=None` and a `blocked_on` list, and the measurement reports how
@@ -38,7 +38,7 @@ class EvalCase:
     observed_output: str | None = None
     expected_output: str | None = None
     # Everything the trace could not supply. A case with a non-empty
-    # blocked_on is not a test, it is a to-do with provenance.
+    # blocked_on is a to-do with provenance, not a test.
     blocked_on: list = field(default_factory=list)
 
     def runnable(self) -> bool:
@@ -83,7 +83,7 @@ def promote(trace: Trace, *, redacted: bool = False) -> EvalCase:
                          if not s.is_error()]
 
     if not case.input_messages:
-        # The older convention puts content in events, so a promoter written
+        # The superseded revision puts content in events, so a promoter written
         # against the newer one finds nothing at all here.
         case.blocked_on.append(
             "no gen_ai.input.messages attribute: content capture was off, or "

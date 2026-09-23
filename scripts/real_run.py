@@ -17,12 +17,18 @@ Two things are measured, and the second is the one that could embarrass the
 offline result:
 
   1 COST      cost computed from the GenAI convention attributes alone, against
-              cost computed from the provider's full usage object. The
-              conventions define gen_ai.usage.input_tokens and
-              .output_tokens and nothing for cache reads, so a request served
-              from cache is billed at the full rate by any attribution built on
-              the conventions. This run makes that happen on purpose, with a
-              shared prefix long enough to be cacheable.
+              cost computed from the provider's full usage object. This script
+              puts the provider's own usage.input_tokens onto
+              gen_ai.usage.input_tokens unchanged, which is what the SDK
+              instrumentations do, and that field EXCLUDES the cached prefix.
+              So a request served from cache loses most of its tokens from the
+              trace. This run makes that happen, with a shared prefix long
+              enough to be cacheable.
+              The conventions have, since 2026-08-20, defined
+              gen_ai.usage.cache_read.input_tokens and asked that
+              gen_ai.usage.input_tokens include cached tokens. This script does
+              neither, because emitting them would measure a conformant
+              collector nobody ships instead of the one everybody does.
 
   2 SURFACES  whether a real model actually reproduces the customer identifier
               into its answer. The redaction measurement assumes the output is
@@ -46,9 +52,9 @@ from obs.cost import PRICES, PRICES_VERIFIED                    # noqa: E402
 from obs.redact import PATTERNS                                 # noqa: E402
 from obs.runs import make_run                                   # noqa: E402
 from obs.spans import (FINISH_REASONS, INPUT_MESSAGES, OP_CHAT,  # noqa: E402
-                       OPERATION, OUTPUT_MESSAGES, REQUEST_MODEL,
-                       RESPONSE_MODEL, SYSTEM, USAGE_INPUT, USAGE_OUTPUT,
-                       Span, Trace)
+                       OPERATION, OUTPUT_MESSAGES, PROVIDER_NAME,
+                       REQUEST_MODEL, RESPONSE_MODEL, USAGE_INPUT,
+                       USAGE_OUTPUT, Span, Trace)
 
 # A long, stable system prompt. Its ONLY job is to exceed the provider's
 # minimum cacheable prefix so that runs after the first are served from cache
@@ -117,10 +123,12 @@ def _span_from_response(trace_id: str, span_id: str, model: str, resp,
         name=f"{OP_CHAT} {model}", kind=OP_CHAT, trace_id=trace_id,
         span_id=span_id,
         attributes={
-            SYSTEM: "anthropic", OPERATION: OP_CHAT,
+            PROVIDER_NAME: "anthropic", OPERATION: OP_CHAT,
             REQUEST_MODEL: model, RESPONSE_MODEL: resp.model,
             FINISH_REASONS: [resp.stop_reason],
-            # The conventions carry these two and only these two.
+            # Passed through from the provider exactly as the SDK
+            # instrumentations pass them, which is the behavior under test:
+            # full["input_tokens"] excludes the cached prefix.
             USAGE_INPUT: full["input_tokens"],
             USAGE_OUTPUT: full["output_tokens"],
             INPUT_MESSAGES: json.dumps(
@@ -151,14 +159,17 @@ def _cost_from_usage(full: dict, price: dict) -> float:
             + full["output_tokens"] / 1e6 * price["out"])
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=int, default=20)
     ap.add_argument("--model", default="claude-sonnet-5", choices=sorted(PRICES))
     ap.add_argument("--max-cost", type=float, default=1.00)
     ap.add_argument("--confirm", action="store_true")
-    ap.add_argument("--out", type=Path, default=Path("audit/real_run.json"))
-    args = ap.parse_args()
+    # A new dated file by default, so a documented run adds a data point and
+    # never replaces audit/real_run.json, the evidence the README cites.
+    ap.add_argument("--out", type=Path, default=None)
+    args = ap.parse_args(argv)
+    out = args.out or Path(f"audit/real_run_{time.strftime('%Y_%m_%d')}.json")
 
     price = PRICES[args.model]
     # Measured from one built prompt plus a typical two-sentence answer, and
@@ -190,6 +201,11 @@ def main() -> int:
         print("\nDry run. Nothing was sent and nothing was billed.")
         print("Re-run with --confirm to spend the amount above.")
         return 0
+
+    if out.exists():
+        print(f"\nREFUSING TO START: {out} exists, and a paid run would "
+              f"overwrite it. Pass --out with a new path.")
+        return 2
 
     import anthropic                                   # noqa: PLC0415
     client = anthropic.Anthropic(api_key=_api_key())
@@ -257,23 +273,37 @@ def main() -> int:
         print(f"the trace is off by        {err:+.2f}%")
     print(f"\nidentifier reproduced in the model's own answer: "
           f"{id_in_output}/{len(ok)}")
+    if len(ok) != args.runs:
+        print(f"NOTE: {args.runs - len(ok)} of {args.runs} requested runs "
+              f"FAILED and are excluded from the denominator above.")
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps({
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
         "adapter": "anthropic", "model": args.model,
-        "runs": args.runs, "elapsed_s": round(elapsed, 1),
+        # Both, because they are different numbers and only one of them is
+        # the denominator of the identifier result. A run that errored is not
+        # a non-reproduction, and reporting "18 out of 20" for two API errors
+        # would say it was.
+        "runs": args.runs,
+        "runs_requested": args.runs,
+        "runs_succeeded": len(ok),
+        "elapsed_s": round(elapsed, 1),
         "prices_verified": PRICES_VERIFIED,
-        "note": "Cost from the trace uses ONLY gen_ai.usage.* attributes, "
-                "which is everything the GenAI conventions define. Cost from "
-                "the usage report uses the provider's cache counters, which "
-                "have no convention attribute.",
+        "note": "Cost from the trace uses ONLY the two gen_ai.usage.* "
+                "attributes every instrumentation emits, with the provider's "
+                "input_tokens passed through unchanged. Cost from the usage "
+                "report uses the provider's cache counters as well. Since "
+                "2026-08-20 the conventions define "
+                "gen_ai.usage.cache_read.input_tokens and ask that "
+                "input_tokens include cached tokens; this collector does "
+                "neither, which is what the SDKs do and what the gap measures.",
         "traced_usd": round(traced_usd, 6),
         "billed_usd": round(billed_usd, 6),
         "cache_read_tokens": cache_reads,
         "identifier_in_output": id_in_output,
         "records": records,
     }, indent=2) + "\n")
-    print(f"\nwrote {args.out}")
+    print(f"\nwrote {out}")
     return 0
 
 

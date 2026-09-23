@@ -30,26 +30,27 @@ from .spans import (DB_STATEMENT, EVENT_ASSISTANT, EVENT_CHOICE,
                     EVENT_EXCEPTION, EVENT_USER, EXCEPTION_MESSAGE,
                     EXCEPTION_STACKTRACE, FINISH_REASONS, HTTP_URL,
                     INPUT_MESSAGES, OP_CHAT, OP_EXECUTE_TOOL, OPERATION,
-                    OUTPUT_MESSAGES, REQUEST_MODEL, RESPONSE_ID,
-                    RESPONSE_MODEL, SYSTEM, TOOL_CALL_ID, TOOL_NAME,
-                    USAGE_INPUT, USAGE_OUTPUT, Event, Span, Trace)
+                    OUTPUT_MESSAGES, PROVIDER_NAME, REQUEST_MODEL, RESPONSE_ID,
+                    RESPONSE_MODEL, TOOL_CALL_ARGUMENTS, TOOL_CALL_ID,
+                    TOOL_CALL_RESULT, TOOL_NAME, USAGE_INPUT, USAGE_OUTPUT,
+                    Event, Span, Trace)
 
 # The eleven places one customer's identity lands in one trace. The redaction
 # measurement reports coverage per surface, so this list IS THE DENOMINATOR,
 # which is exactly why a surface the corpus emits and this tuple omits makes
 # the measurement flatter itself. obs/redact.py says so in its own words.
 PLANTED_SURFACES = (
-    "input_messages_attr",    # newer convention: content in a span attribute
-    "user_message_event",     # older convention: content in a span event
+    "input_messages_attr",    # current revision: content in a span attribute
+    "user_message_event",     # superseded revision: content in a span event
     "output_messages_attr",   # the model's answer, quoting the customer back
-    "choice_event",           # the same answer under the older convention
+    "choice_event",           # the same answer under the superseded revision
     "tool_call_arguments",    # what the agent passed to lookup_customer
     "tool_result",            # what came back, which is the whole record
     "http_url",               # the tool's own outbound call, id in the path
     "db_statement",           # the query the tool ran, id inline
     "exception_message",      # the failure text, which quotes the input
     "exception_stacktrace",   # the frame arguments, which quote it again
-    "assistant_message_event",  # the answer a THIRD time, older convention
+    "assistant_message_event",  # the answer a third time, superseded revision
 )
 
 _FIRST = ("Dana", "Priya", "Marcus", "Elena", "Tomas", "Aisha", "Ruth", "Ivan")
@@ -114,12 +115,11 @@ def make_run(index: int) -> Trace:
     plan_in = rng.randint(*_IN_RANGE)
     plan_out = rng.randint(*_OUT_RANGE)
     cached = rng.random() < P_CACHED
-    # How a provider actually reports a cache hit, taken from the paid run
-    # rather than assumed. Anthropic reports `input_tokens` EXCLUDING the
-    # cached prefix and puts the cached tokens in a separate counter. The
-    # measured run: input_tokens 143, cache_read_input_tokens 2,579: the
-    # conventional attribute saw 5% of the tokens the request actually
-    # processed.
+    # How a provider actually reports a cache hit, as measured on the paid
+    # run. Anthropic reports `input_tokens` EXCLUDING the cached prefix and
+    # puts the cached tokens in a separate counter. The measured run:
+    # input_tokens 143, cache_read_input_tokens 2,579, so the conventional
+    # attribute saw 5% of the tokens the request actually processed.
     #
     # Putting the whole input on the Span and modeling the cache as a discount
     # is the intuitive model and it points the wrong way: it makes a trace
@@ -135,14 +135,14 @@ def make_run(index: int) -> Trace:
         name=f"{OP_CHAT} claude-sonnet-5", kind=OP_CHAT, trace_id=trace_id,
         span_id=f"{trace_id}-plan",
         attributes={
-            SYSTEM: "anthropic", OPERATION: OP_CHAT,
+            PROVIDER_NAME: "anthropic", OPERATION: OP_CHAT,
             REQUEST_MODEL: "claude-sonnet-5",
             RESPONSE_MODEL: "claude-sonnet-5",
             RESPONSE_ID: f"msg_{index:05d}",
             FINISH_REASONS: ["tool_use"],
             # Only the uncached input reaches the convention attribute.
             USAGE_INPUT: plan_uncached, USAGE_OUTPUT: plan_out,
-            # Newer convention: the whole conversation, in an attribute.
+            # Current revision: the whole conversation, in an attribute.
             INPUT_MESSAGES: json.dumps(
                 [{"role": "user", "parts": [{"type": "text",
                                              "content": prompt}]}]),
@@ -166,7 +166,7 @@ def make_run(index: int) -> Trace:
             attributes={
                 OPERATION: OP_EXECUTE_TOOL, TOOL_NAME: "lookup_customer",
                 TOOL_CALL_ID: f"call_{index:05d}",
-                "gen_ai.tool.call.arguments": tool_args,
+                TOOL_CALL_ARGUMENTS: tool_args,
                 HTTP_URL: ("https://crm.internal.example/v2/customers/"
                            f"{who['customer_id']}?email={who['email']}"),
                 DB_STATEMENT: ("SELECT * FROM customers WHERE email = "
@@ -189,7 +189,7 @@ def make_run(index: int) -> Trace:
             plant("exception_message", sp.span_id, msg)
             plant("exception_stacktrace", sp.span_id, who["email"])
         else:
-            sp.attributes["gen_ai.tool.call.result"] = tool_result
+            sp.attributes[TOOL_CALL_RESULT] = tool_result
             plant("tool_result", sp.span_id, tool_result)
 
     # -- the answering call, also retried some of the time -----------------
@@ -203,7 +203,7 @@ def make_run(index: int) -> Trace:
             trace_id=trace_id, span_id=f"{trace_id}-answer{attempt}",
             parent_id=plan.span_id,
             attributes={
-                SYSTEM: "anthropic", OPERATION: OP_CHAT,
+                PROVIDER_NAME: "anthropic", OPERATION: OP_CHAT,
                 REQUEST_MODEL: "claude-sonnet-5",
                 RESPONSE_MODEL: "claude-sonnet-5",
                 USAGE_INPUT: ans_in,
@@ -267,10 +267,14 @@ def make_run(index: int) -> Trace:
         },
         "cached": cached,
     }
-    # The provider bills cached input at a discount, and the trace does not say
-    # so anywhere: no GenAI attribute carries a cache flag. That omission is
-    # the whole cost finding, so it is recorded in the truth and deliberately
-    # NOT written onto the span.
+    # The provider bills cached input at a discount, and the span written above
+    # does not say so anywhere. The conventions have a place for it: since
+    # 2026-08-20 they define gen_ai.usage.cache_read.input_tokens and ask that
+    # gen_ai.usage.input_tokens include cached tokens. In practice, SDK
+    # instrumentations pass the provider's own input_tokens through unchanged
+    # and emit no cache counter, and that is the collector this corpus models,
+    # since a conformant one would measure a stack nobody runs. So the cached
+    # count is recorded in the truth and not written onto the span.
     return tr
 
 

@@ -48,17 +48,28 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: pytest -q -rs
 
-      # The whole free measurement, at a smaller corpus so CI stays fast. The
-      # README quotes the 500-run figures; this checks the code that produces
-      # them still runs, not that the numbers match at n=120.
-      - name: Offline measurement
+      # The measurement is re-run and compared to the committed evidence, so
+      # an edit to obs/ that moves a figure fails here even when the README
+      # and the committed JSON still agree with each other.
+      #
+      # The corpus is seeded and the suite is stdlib-only, so a fresh 500-run
+      # file is byte-identical to the committed one or something really did
+      # change. `diff` prints exactly what moved.
+      - name: Offline measurement reproduces the committed evidence
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: python scripts/offline_demo.py --runs 120
+        run: |
+          python scripts/offline_demo.py --runs 500 --json /tmp/offline-ci.json
+          diff -u audit/offline.json /tmp/offline-ci.json
 
       # A README is prose and drifts; audit/*.json is evidence and does not.
       # This rebuilds each published figure from the JSON and requires the
       # exact string, so a re-run that shifts a number fails loudly rather
-      # than leaving the document quietly wrong.
-      - name: README numbers match the shipped results
+      # than leaving the document quietly wrong. It also rebuilds the
+      # enumerations, the surface table's rows and the suite size, and re-runs
+      # the offline demo to diff it against the block in SAMPLE_RUN.md, which
+      # presents every block as captured output.
+      - name: README and SAMPLE_RUN match the shipped results
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: python scripts/check_readme_numbers.py

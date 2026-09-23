@@ -10,8 +10,10 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
-# scripts/real_run.py only. Nothing in obs/ or tests/ imports these.
-real = ["anthropic>=0.60", "openai>=1.40"]
+# scripts/real_run.py only; nothing in obs/ or tests/ imports this. The paid
+# leg calls Anthropic. `gpt-5.4` has a row in obs/cost.py's price table so the
+# table is not single-vendor, but pricing a model is not calling it.
+real = ["anthropic>=0.60"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
