@@ -104,7 +104,7 @@ def main() -> int:
     gap = cost.attribution_gap(traces)
     print(f"  cached input tokens absent from the trace: "
           f"{gap['cached_input_tokens']:,} "
-          f"(${gap['cached_underbill_usd']:.4f} never billed to anyone)")
+          f"(${gap['cached_underbill_usd']:.4f} billed but not in the trace)")
     print(f"  retry input tokens a dedupe drops:        "
           f"{gap['retry_input_tokens']:,} "
           f"(${gap['retry_underbill_usd_if_deduped']:.4f} under-billed)")

@@ -34,7 +34,7 @@ offline result:
               into its answer. The redaction measurement assumes the output is
               a leak surface; if a real model never quotes the identifier back,
               that assumption is generous and the offline leak counts are
-              inflated. This checks it rather than assuming it.
+              inflated. This checks it instead of assuming it.
 """
 
 from __future__ import annotations
@@ -106,9 +106,10 @@ def _span_from_response(trace_id: str, span_id: str, model: str, resp,
     """Build a convention-shaped span, and return the FULL usage separately.
 
     The split is the experiment. Everything that goes on the span is something
-    the GenAI conventions define. The cache counters have no convention
-    attribute, so they go in the second return value: exactly where a real
-    collector loses them.
+    the GenAI conventions define. The cache counters are not on the span, as
+    the SDKs of this run did not emit gen_ai.usage.cache_read.input_tokens
+    (added to the registry on 2026-08-20), so they go in the second return
+    value: exactly where a real collector loses them.
     """
     usage = resp.usage
     full = {

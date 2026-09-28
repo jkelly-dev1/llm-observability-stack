@@ -16,8 +16,8 @@ stdlib-only.
 
 ```
 $ .venv/bin/python -m pytest -q
-........................................                                 [100%]
-40 passed in 0.26s
+................................................                         [100%]
+48 passed in 1.48s
 ```
 
 ## The offline measurement (free, no model called)
@@ -52,7 +52,7 @@ runs that actually failed: 21
   method                 traced       true      error   error %
   spans_summed           6.6691     6.7712    -0.1021    -1.51%
   spans_deduped          6.5172     6.7712    -0.2540    -3.75%
-  cached input tokens absent from the trace: 510,642 ($0.1021 never billed to anyone)
+  cached input tokens absent from the trace: 510,642 ($0.1021 billed but not in the trace)
   retry input tokens a dedupe drops:        75,950 ($0.1519 under-billed)
   Both push the same way: a trace-derived total is too LOW.
 
@@ -67,7 +67,6 @@ runs that actually failed: 21
 4. PROMOTION: traces that can become runnable eval cases
   runnable cases: 0 of 500
       500  no expected output
-      500  tool responses are not reproducible from the trace
 
 wrote audit/offline.json
 ```
@@ -110,6 +109,12 @@ All 20 of the 20 requested runs succeeded, so the 20/20 above has a denominator
 of runs that actually COMPLETED, not of runs that were asked for. A run that
 errored would be excluded from it and reported separately, because two API
 failures are not two non-reproductions.
+
+`audit/real_run.json` carries no `runs_requested` or `runs_succeeded` key, both
+of which `scripts/real_run.py` writes, so it is not output of the script as it
+ships. Its `note` says the cache counters have no convention attribute; the
+registry added `gen_ai.usage.cache_read.input_tokens` on 2026-08-20, eight days
+after this run.
 
 This run sets the direction of the cost result. Treating a cache hit as a
 discount on tokens still in the trace would make a trace-derived cost too high.

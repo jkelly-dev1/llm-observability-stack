@@ -1,7 +1,7 @@
 # llm-observability-stack
 
 OpenTelemetry GenAI tracing for agent runs, and a measurement of what the
-trace quietly copies, what it silently under-bills, and which failures it never
+trace silently copies, what it silently under-bills, and which failures it never
 keeps.
 
 A personal learning project. The premise is that you instrument an agent so you
@@ -133,10 +133,18 @@ actually do instead, which is to pass `usage.input_tokens` through unchanged,
 and that is what produces the 44%.
 
 Offline, on 500 constructed runs, the same effect is worth -1.5%, and deduping
-retried calls, the obvious correction, makes it -3.8%, because those attempts
-really were billed. The spread between -1.5% and -44% is entirely how much of
-the prompt is a cached shared prefix, which is a property of your agent rather
-than of your tracing.
+retried calls, the obvious correction, makes it -3.8%, because the corpus bills
+the input of a failed attempt. That is an assumption of the constructed runs,
+not a measurement: the SDK's overloaded error carries no usage, and whether a
+provider bills an overloaded call was not tested. If it does not, the dedupe is
+the right correction.
+
+Two things separate -1.5% from -44%. One is how much of the prompt is a cached
+shared prefix, which is a property of your agent rather than of your tracing.
+The other is the paid run's one cache write: the first call wrote the
+2,579-token prefix to the cache, and that write is $0.0064 of the $0.0162 gap.
+Without that call the trace is off by 33.75%. The offline model has no
+cache-write term.
 
 The intuitive model treats a cache hit as a discount on tokens still present
 in the trace, which would make attribution over-bill. Twenty real calls show
@@ -179,7 +187,6 @@ have its trace, so you turn it into a regression case.
 ```
 runnable cases: 0 of 500
     500  no expected output
-    500  tool responses are not reproducible from the trace
 ```
 
 A trace records what the model said. A regression case needs what it should have
@@ -192,8 +199,10 @@ design rather than a hedge. "no expected output" is appended unconditionally, so
 `runnable()` is False for every trace this or any other corpus could produce.
 The 500 is a denominator, not an outcome that came close to differing. Read the
 row as an argument about what a trace is, not as a rate that might improve with
-better instrumentation. The second row IS contingent: it counts the traces that
-called a tool, and it would fall to zero on a corpus without tool use.
+better instrumentation. Tool calls are not a blocker: every successful tool span
+carries `gen_ai.tool.call.result`, and the case keeps it as the fixture a replay
+needs. A tool call with no recorded result blocks the case, and so does a
+redacted trace, whose fixtures are masked.
 
 There is also a direct conflict between two sections of this repository: the
 redaction section recommends masking identifiers, and a redacted trace cannot
@@ -226,7 +235,7 @@ be replayed as the run that happened. That tension is reported, not resolved.
 | Summing spans under-bills, because the cached tokens are absent from the trace, not mispriced in it | `tests/test_cost_sampling_promote.py::test_summing_spans_underbills_because_cached_tokens_are_absent` (the direction the paid run established) |
 | Put the cached tokens back into `input_tokens` and the finding inverts, so the provider semantics are pinned | `tests/test_cost_sampling_promote.py::test_cached_tokens_are_absent_from_the_span_and_not_discounted_in_it` |
 | Deduping retried calls, the obvious correction, moves the total further from the truth | `tests/test_cost_sampling_promote.py::test_deduping_retries_makes_the_error_worse_not_better` (mutation-checked: make the dedupe a no-op and it fails) |
-| Retried model calls really are in the trace twice, each carrying tokens that were billed | `tests/test_cost_sampling_promote.py::test_retried_model_calls_are_really_in_the_trace_twice` |
+| Retried model calls are in the constructed trace twice, each carrying the input tokens the corpus assumes were billed | `tests/test_cost_sampling_promote.py::test_retried_model_calls_are_really_in_the_trace_twice` |
 | An unpriced model is refused, not guessed at | `tests/test_cost_sampling_promote.py::test_an_unpriced_model_is_refused` |
 | The paid run sends nothing without `--confirm`, exits 2 over its cost cap, and refuses to write over an existing results file | `tests/test_real_run.py::test_the_dry_run_sends_nothing_and_exits_zero`, `::test_the_cost_cap_refuses_with_exit_two`, `::test_a_confirmed_run_refuses_to_overwrite_existing_evidence`, `::test_the_default_output_is_a_new_file_not_the_shipped_evidence` (mutation-checked: drop the refusal, or restore a fixed `--out` default, and they fail) |
 | Head sampling keeps its rate of the failures and no more, because it decides before anything has gone wrong | `tests/test_cost_sampling_promote.py::test_head_sampling_keeps_its_rate_of_failures_and_no_more` |
@@ -247,15 +256,15 @@ and gets worse under dedupe, that only an outcome signal reaches 100%.
 The paid run is absent for a different reason: it is evidence, not an
 invariant. The 44% under-bill and the 20-of-20 identifier check are what 20
 calls did on one day, a test that re-ran them would cost money on every commit,
-and the cache ratio that produces 44% is a property of the prompt rather than
-of the tracing. Raw outcomes are in `audit/`, and the semantics that run
+and the cache ratio and the one cache write that produce 44% are properties of
+the prompt and of that run rather than of the tracing. Raw outcomes are in `audit/`, and the semantics that run
 established are pinned by the two cost tests above.
 
 ## Reproducing
 
 ```
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m pytest -q                              # 40 tests
+.venv/bin/python -m pytest -q                              # 48 tests
 .venv/bin/python scripts/offline_demo.py --runs 500 --json audit/offline.json
 ```
 
@@ -271,7 +280,7 @@ ENV_FILE=~/.secrets/ai.env .venv/bin/python scripts/real_run.py --confirm
 |---|---|---|---|---|
 | cost and surface check | claude-sonnet-5 | 20 | $0.037 | trace under-bills by 44%; identifier in output 20/20 |
 
-## What this does not measure
+## Limits
 
 - **Any deployment's rates.** The retry, cache and failure rates in
   `obs/runs.py` are stated constants. Every offline number scales with them,

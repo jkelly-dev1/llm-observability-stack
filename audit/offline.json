@@ -156,7 +156,7 @@
         "user_message_event"
       ],
       "by_surface": {},
-      "note": "walk every string attribute and every event field. The only policy that covers the client and exception surfaces"
+      "note": "walk every string attribute, and the content and exception fields of every event. The only policy that covers the client and exception surfaces"
     }
   ],
   "cost": {
@@ -240,8 +240,7 @@
     "cases": 500,
     "runnable": 0,
     "blockers": {
-      "no expected output": 500,
-      "tool responses are not reproducible from the trace": 500
+      "no expected output": 500
     }
   }
 }

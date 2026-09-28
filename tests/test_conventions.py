@@ -168,3 +168,39 @@ def test_every_genai_name_the_model_emits_is_in_one_of_the_three_groups():
     assert emitted <= declared, (
         f"gen_ai.* constants in obs/spans.py that no group pins: "
         f"{sorted(emitted - declared)}")
+
+
+def test_every_key_the_code_emits_is_a_name_this_file_pins():
+    """The check above reads the constants in obs/spans.py. A name written as
+    a bare literal where a span is built never passes through them, so this
+    reads what the code EMITS: every attribute and event key in a corpus and
+    on the span real_run.py builds from a provider response."""
+    import importlib.util
+    import pathlib
+    import types
+    from obs.runs import corpus
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location(
+        "real_run_for_names", root / "scripts" / "real_run.py")
+    real_run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(real_run)
+    usage = types.SimpleNamespace(input_tokens=1, output_tokens=1,
+                                  cache_creation_input_tokens=0,
+                                  cache_read_input_tokens=0)
+    resp = types.SimpleNamespace(usage=usage, model="m", stop_reason="end_turn")
+    paid, _ = real_run._span_from_response("t", "s", "m", resp, "p", "x")
+
+    spans_seen = [s for t in corpus(300) for s in t.spans] + [paid]
+    attrs = {k for s in spans_seen for k in s.attributes}
+    events = {e.name for s in spans_seen for e in s.events}
+    fields = {k for s in spans_seen for e in s.events for k in e.attributes}
+
+    non_genai = dict(NON_GENAI_ATTRIBUTES)
+    exception_event = non_genai.pop("EVENT_EXCEPTION")
+    assert attrs <= set(GENAI_ATTRIBUTES.values()) | set(non_genai.values()), (
+        f"emitted but pinned by nothing: "
+        f"{sorted(attrs - set(GENAI_ATTRIBUTES.values()) - set(non_genai.values()))}")
+    assert events <= set(SUPERSEDED_EVENTS.values()) | {exception_event}
+    assert fields <= {"content", non_genai["EXCEPTION_MESSAGE"],
+                      non_genai["EXCEPTION_STACKTRACE"]}

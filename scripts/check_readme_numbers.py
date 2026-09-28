@@ -1,19 +1,22 @@
-"""Re-derive every published number in README.md from audit/*.json and diff them.
+"""Re-derive README.md's published figures from audit/*.json and diff them.
 
 A README is prose and drifts; audit/*.json is evidence and does not. This
 script rebuilds each figure from the JSON and asserts the exact string is
 present in the README, so a re-run that shifts a figure fails loudly instead of
-leaving the document quietly wrong.
+leaving the document silently wrong.
 
     python3 scripts/check_readme_numbers.py            check
     python3 scripts/check_readme_numbers.py --emit     print what it derives
+
+The one number in README.md it does not derive is the HTTP status in "200 OK",
+which names a response code instead of stating a measurement.
 
 Whitespace AND emphasis are normalized on both sides. Which cell is bold is a
 choice about where a reader's eye should land and no evidence file knows it;
 demanding the markup would certify the typography instead of the figures.
 
 The count is printed whether OR NOT anything is missing, so a version of this
-script that quietly stopped deriving half of them is visible rather than clean.
+script that silently stopped deriving half of them is visible rather than clean.
 
 It checks enumerations as well as figures. A surface added to obs/runs.py
 changes the "9 of 11" figures and also needs a row in the README's surface
@@ -116,8 +119,81 @@ def prose_figures():
     # evidence and needs no new field in the shipped file.
     succeeded = sum(1 for r in real["records"] if "error" not in r)
     out.append(("prose:identifier",
-                "the account number came back in the model's own text %d out "
-                "of %d times" % (real["identifier_in_output"], succeeded)))
+                "in %d real calls the account number came back in the model's "
+                "own text %d out of %d times"
+                % (real["runs"], real["identifier_in_output"], succeeded)))
+    # The same run, stated again further down: each copy is a row, or an
+    # edit to one copy would pass on the strength of the other.
+    ident = "%d of %d" % (real["identifier_in_output"], succeeded)
+    out += [("prose:instruction-following",
+             "so %s measures INSTRUCTION-FOLLOWING" % ident),
+            ("block:real-run-header", "%d real calls, %s, a cached system prefix:"
+             % (real["runs"], real["model"])),
+            ("prose:paid-run-scope", "the %s identifier check are what %d calls did"
+             % (ident.replace(" ", "-"), real["runs"]))]
+    # Only an outcome signal captures every failure: the one sampling policy
+    # besides keeping everything that reaches the top rate.
+    samp = load("offline.json")["sampling"]
+    top = [r for r in samp if r["policy"] != "keep_everything"
+           and r["failure_capture_pct"] == max(x["failure_capture_pct"] for x in samp)]
+    if [r["policy"] for r in top] != ["tail_run_failed"]:
+        raise SystemExit("the outcome-signal sentence no longer describes the "
+                         "sampling results: %r" % [r["policy"] for r in top])
+    out += [("prose:outcome-signal", "only an outcome signal reaches %g%%"
+             % top[0]["failure_capture_pct"]),
+            ("command:offline-runs", "offline_demo.py --runs %d"
+             % load("offline.json")["runs"]),
+            ("prose:headline-calls", "A second result, from %d real calls" % real["runs"]),
+            ("prose:offline-runs", "Offline, on %d constructed runs"
+             % load("offline.json")["runs"]),
+            ("prose:denominator", "The %d is a denominator"
+             % load("offline.json")["promotion"]["cases"])]
+
+    # The headline prose. Each figure carries enough of its sentence that a
+    # match is a match of the claim.
+    under = round(100 * (billed - traced) / billed)
+    red = {r["policy"]: r for r in load("offline.json")["redaction"]}
+    pc = red["prompt_and_completion"]
+    surfaces = len(pc["surfaces_leaking"]) + len(pc["surfaces_clean"])
+    head = {r["policy"]: r for r in load("offline.json")["sampling"]}["head_10pct"]
+    ok = [r for r in real["records"] if "error" not in r]
+    read = next(r["usage"] for r in ok if r["usage"]["cache_read_input_tokens"])
+    wrote = [r for r in ok if r["usage"]["cache_creation_input_tokens"]]
+    write_tokens = sum(r["usage"]["cache_creation_input_tokens"] for r in wrote)
+    write_usd = sum(r["billed_usd"] - r["traced_usd"] for r in wrote)
+    # The run's totals less the write call, not a re-sum of the other 19:
+    # per-record figures are rounded to the micro-dollar and would drift.
+    rest_t = traced - sum(r["traced_usd"] for r in wrote)
+    rest_b = billed - sum(r["billed_usd"] for r in wrote)
+    out += [
+        ("prose:headline-surfaces",
+         "readable on %d of %d surfaces in the same trace"
+         % (len(pc["surfaces_leaking"]), surfaces)),
+        ("prose:headline-cost", "attributes was %d%% below" % under),
+        ("prose:planted", "Measured over %d runs, %s planted identifiers"
+         % (load("offline.json")["runs"], "{:,}".format(pc["planted"]))),
+        ("prose:cached-request",
+         "the conventional attribute saw %d of the %s"
+         % (read["input_tokens"],
+            "{:,}".format(read["input_tokens"]
+                          + read["cache_read_input_tokens"]))),
+        ("prose:what-produces", "that is what produces the %d%%" % under),
+        ("prose:table-pins",
+         "%d of %d, %d of %d, %d failure of %d at head 10%%"
+         % (len(pc["surfaces_leaking"]), surfaces, pc["leaked"],
+            pc["planted"], head["failures_kept"], head["failures_total"])),
+        ("prose:evidence-not-invariant", "The %d%% under-bill" % under),
+        ("prose:limits-cache-write", "the one cache write that produce %d%%" % under),
+        ("prose:results-row",
+         "| %s | %d | $%.3f | trace under-bills by %d%%; identifier in output "
+         "%d/%d |" % (real["model"], real["runs"], billed, under,
+                      real["identifier_in_output"], len(ok))),
+        ("prose:cache-write",
+         "wrote the %s-token prefix to the cache, and that write is $%.4f of "
+         "the $%.4f gap. Without that call the trace is off by %.2f%%"
+         % ("{:,}".format(write_tokens), write_usd, billed - traced,
+            100 * (rest_b - rest_t) / rest_b)),
+    ]
     return out
 
 
@@ -190,9 +266,22 @@ def test_count():
     return [("prose:test-count", "# %d tests" % n)]
 
 
+def rows_promotion():
+    """The promotion section: its heading, its block, and the sibling
+    paragraph that repeats the count, each from offline.json."""
+    p = load("offline.json")["promotion"]
+    of = "%d of %d" % (p["runnable"], p["cases"])
+    out = [("promotion:heading", "why %s promote" % of),
+           ("promotion:runnable", "runnable cases: %s" % of),
+           ("promotion:sibling", "why %s traces become runnable cases" % of)]
+    for why, count in sorted(p["blockers"].items()):
+        out.append(("promotion:blocker:" + why, "%d  %s" % (count, why)))
+    return out
+
+
 def emit():
     return (rows_redaction() + rows_sampling() + prose_figures()
-            + rows_surface_table() + test_count())
+            + rows_promotion() + rows_surface_table() + test_count())
 
 
 def _fenced_block(text, after):
@@ -288,13 +377,17 @@ def squash(text):
     return re.sub(r"\s+", " ", text.replace("**", ""))
 
 
+#: The document checked. A module constant so a test can point it elsewhere.
+README = os.path.join(ROOT, "README.md")
+
+
 def main():
     derived = emit()
     if "--emit" in sys.argv:
         for tag, row in derived:
             print("%s\n%s" % (tag, row))
         return 0
-    with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as fh:
+    with open(README, encoding="utf-8") as fh:
         raw = fh.read()
     readme = squash(raw)
     missing = [(t, r) for t, r in derived if squash(r) not in readme]

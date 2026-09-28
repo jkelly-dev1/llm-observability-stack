@@ -113,8 +113,9 @@ CONTENT_AND_EVENTS = Policy(
 EVERYTHING = Policy(
     "every_string_in_the_span",
     walk_all_attrs=True, event_content=True, event_errors=True,
-    note="walk every string attribute and every event field. The only policy "
-         "that covers the client and exception surfaces")
+    note="walk every string attribute, and the content and exception fields "
+         "of every event. The only policy that covers the client and "
+         "exception surfaces")
 
 POLICIES = (NONE, PROMPT_ONLY, CONTENT_ATTRS, CONTENT_AND_EVENTS, EVERYTHING)
 

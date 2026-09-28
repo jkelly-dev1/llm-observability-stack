@@ -25,7 +25,7 @@ import json
 from dataclasses import dataclass, field
 
 from .spans import (INPUT_MESSAGES, OP_CHAT, OP_EXECUTE_TOOL, OUTPUT_MESSAGES,
-                    TOOL_NAME, Trace)
+                    TOOL_CALL_RESULT, TOOL_NAME, Trace)
 
 
 @dataclass
@@ -35,6 +35,9 @@ class EvalCase:
     case_id: str
     input_messages: list = field(default_factory=list)
     tools_called: list = field(default_factory=list)
+    # What each successful tool call returned, as the trace recorded it: the
+    # fixture a replay needs so the tool answers the way it did that day.
+    tool_fixtures: list = field(default_factory=list)
     observed_output: str | None = None
     expected_output: str | None = None
     # Everything the trace could not supply. A case with a non-empty
@@ -47,6 +50,7 @@ class EvalCase:
     def as_dict(self) -> dict:
         return {"case_id": self.case_id, "input_messages": self.input_messages,
                 "tools_called": self.tools_called,
+                "tool_fixtures": self.tool_fixtures,
                 "observed_output": self.observed_output,
                 "expected_output": self.expected_output,
                 "blocked_on": list(self.blocked_on)}
@@ -78,9 +82,11 @@ def promote(trace: Trace, *, redacted: bool = False) -> EvalCase:
             except (json.JSONDecodeError, KeyError, IndexError):
                 pass
 
-    case.tools_called = [s.attributes.get(TOOL_NAME)
-                         for s in trace.by_kind(OP_EXECUTE_TOOL)
-                         if not s.is_error()]
+    tool_spans = [s for s in trace.by_kind(OP_EXECUTE_TOOL) if not s.is_error()]
+    case.tools_called = [s.attributes.get(TOOL_NAME) for s in tool_spans]
+    case.tool_fixtures = [{"tool": s.attributes.get(TOOL_NAME),
+                           "result": s.attributes.get(TOOL_CALL_RESULT)}
+                          for s in tool_spans]
 
     if not case.input_messages:
         # The superseded revision puts content in events, so a promoter written
@@ -101,12 +107,19 @@ def promote(trace: Trace, *, redacted: bool = False) -> EvalCase:
             "input is redacted: the identifiers the run turned on are masked, "
             "so the replay is not the run")
 
-    # Tool results are not in the case at all: replaying needs the tool to
-    # return what it returned that day, and nothing in a trace pins that.
-    if case.tools_called:
+    # A replay needs each tool to return what it returned that day. The trace
+    # carries that as gen_ai.tool.call.result on every successful tool span,
+    # so the fixture comes from there; the case is blocked only where the
+    # result is missing, or masked by redaction.
+    missing = sum(1 for f in case.tool_fixtures if f["result"] is None)
+    if missing:
         case.blocked_on.append(
-            "tool responses are not reproducible from the trace: the case "
-            "needs a recorded fixture per tool call")
+            f"tool responses are not in the trace: {missing} tool call(s) "
+            f"carry no gen_ai.tool.call.result")
+    elif redacted and _looks_redacted([f["result"] for f in case.tool_fixtures]):
+        case.blocked_on.append(
+            "tool responses are redacted: the recorded fixtures are masked, so "
+            "the replayed tools would not answer as they did")
     return case
 
 

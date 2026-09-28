@@ -8,7 +8,7 @@ import pytest
 
 from obs import cost, sampling
 from obs.promote import promote, promote_all
-from obs.redact import EVERYTHING
+from obs.redact import EVERYTHING, PROMPT_ONLY
 from obs.runs import (SYSTEM_PREFIX_TOKENS, _IN_RANGE, corpus,  # noqa: PLC2701
                       make_run)
 from obs.spans import OP_CHAT, USAGE_INPUT
@@ -52,7 +52,7 @@ def test_cached_tokens_are_absent_from_the_span_and_not_discounted_in_it():
     `truth["input_tokens"]` together would move both sides and pass such a
     check.
 
-    So the anchor is a constant neither side can quietly restate: `_IN_RANGE`,
+    So the anchor is a constant neither side can silently restate: `_IN_RANGE`,
     the declared per-call input range the generator draws from. A cached prefix
     is SYSTEM_PREFIX_TOKENS, larger than the whole range, so a span that had it
     folded in could not be inside the range any more. That holds however the
@@ -110,9 +110,9 @@ def test_the_paid_run_evidence_shows_the_provider_excluding_the_cache():
 
 def test_deduping_retries_makes_the_error_worse_not_better():
     """Mutation check on a tempting fix. Deduping retried calls is the obvious
-    correction, and it moves the total further from the truth: those attempts
-    really were billed. Both effects push the same way, so there is no
-    cancellation to hide behind."""
+    correction, and in this corpus it moves the total further from the
+    truth, because the corpus bills those attempts. Both effects push the
+    same way, so there is no cancellation to hide behind."""
     traces = corpus(200)
     summed = cost.drift(traces)
     deduped = cost.drift(traces, dedupe_retries=True)
@@ -254,3 +254,64 @@ def test_redacting_the_trace_breaks_the_replay_it_would_have_supported():
     EVERYTHING.apply(trace)
     case = promote(trace, redacted=True)
     assert any("input is redacted" in b for b in case.blocked_on)
+
+
+def test_a_promoted_case_carries_a_fixture_per_tool_call():
+    """The trace records what each tool returned; the case keeps it as the
+    fixture a replay needs, and is not blocked for lacking one."""
+    from obs.promote import promote
+    from obs.runs import corpus
+    from obs.spans import OP_EXECUTE_TOOL, TOOL_CALL_RESULT
+    trace = next(t for t in corpus(50)
+                 if any(not s.is_error() for s in t.by_kind(OP_EXECUTE_TOOL)))
+    case = promote(trace)
+    results = [s.attributes[TOOL_CALL_RESULT]
+               for s in trace.by_kind(OP_EXECUTE_TOOL) if not s.is_error()]
+    assert [f["result"] for f in case.tool_fixtures] == results
+    assert not any(b.startswith("tool responses") for b in case.blocked_on)
+
+
+def test_a_tool_call_with_no_recorded_result_blocks_the_case():
+    from obs.promote import promote
+    from obs.runs import corpus
+    from obs.spans import OP_EXECUTE_TOOL, TOOL_CALL_RESULT
+    trace = next(t for t in corpus(50)
+                 if any(not s.is_error() for s in t.by_kind(OP_EXECUTE_TOOL)))
+    for s in trace.by_kind(OP_EXECUTE_TOOL):
+        s.attributes.pop(TOOL_CALL_RESULT, None)
+    case = promote(trace)
+    assert any(b.startswith("tool responses are not in the trace")
+               for b in case.blocked_on)
+
+
+def test_a_redacted_trace_blocks_on_its_masked_tool_responses():
+    """A redaction that reaches the tool results masks the fixtures a replay
+    needs; one that stops at the prompt leaves them, and does not block."""
+    from obs.promote import promote
+    from obs.runs import corpus
+    from obs.spans import OP_EXECUTE_TOOL
+    trace = next(t for t in corpus(50)
+                 if any(not s.is_error() for s in t.by_kind(OP_EXECUTE_TOOL)))
+    masked = copy.deepcopy(trace)
+    EVERYTHING.apply(masked)
+    case = promote(masked, redacted=True)
+    assert any(b.startswith("tool responses are redacted")
+               for b in case.blocked_on), case.blocked_on
+    prompt_only = copy.deepcopy(trace)
+    PROMPT_ONLY.apply(prompt_only)
+    case = promote(prompt_only, redacted=True)
+    assert not any(b.startswith("tool responses are redacted")
+                   for b in case.blocked_on), case.blocked_on
+
+
+def test_a_case_serializes_with_its_fixtures_and_blockers():
+    """as_dict is the case as it leaves this module; the fixtures and the
+    blockers must survive it."""
+    from obs.promote import promote
+    from obs.runs import corpus
+    case = promote(corpus(5)[0])
+    d = case.as_dict()
+    assert d["tool_fixtures"] == case.tool_fixtures
+    assert d["blocked_on"] == case.blocked_on
+    assert d["case_id"] == case.case_id
+    assert d["expected_output"] is None

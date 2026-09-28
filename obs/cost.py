@@ -7,10 +7,11 @@ it is three specific, nameable effects, each of which is a MISSING ATTRIBUTE
 rather than a bug in the arithmetic:
 
   RETRIES        a retried call emits two spans. Only one of them was billed
-                 for output, but both carry input tokens, and both were billed.
-                 An attribution that dedupes by call id under-bills; one that
-                 sums every span over-bills unless the failed attempt really
-                 did consume input, which it did.
+                 for output, but both carry input tokens. The constructed
+                 corpus bills both, so there an attribution that dedupes by
+                 call id under-bills and one that sums every span is right.
+                 Whether a provider bills a failed attempt's input was not
+                 measured; where it does not, the dedupe is right instead.
   PROMPT CACHING the provider reports cached input in a SEPARATE counter and
                  excludes it from ITS OWN input_tokens. An instrumentation that
                  copies that field onto gen_ai.usage.input_tokens therefore
@@ -83,8 +84,10 @@ def from_spans(trace: Trace, model: str = "claude-sonnet-5",
     """Attribute cost using ONLY what the trace records.
 
     This is the corrected form of the naive method: it uses every attribute the
-    GenAI conventions actually define. It cannot see prompt caching, because no
-    such attribute exists.
+    GenAI conventions actually define. It cannot see prompt caching: the
+    registry added gen_ai.usage.cache_read.input_tokens on 2026-08-20, and the
+    instrumentation modeled here, like the SDKs of the paid run, does not emit
+    it.
     """
     p = _price(model)
     chats: list = []
@@ -162,8 +165,9 @@ def attribution_gap(traces, model: str = "claude-sonnet-5") -> dict:
     for t in traces:
         u = t.truth["true_usage"]
         if u["model_attempts"] > 1:
-            # The failed attempt's input tokens: billed, and present in the
-            # trace, so summing spans is right and deduping is wrong.
+            # The failed attempt's input tokens: billed in this corpus, and
+            # present in the trace, so here summing spans is right and
+            # deduping is wrong.
             retry_input += sum(
                 int(s.attributes.get(USAGE_INPUT, 0))
                 for s in t.by_kind(OP_CHAT) if s.is_error())

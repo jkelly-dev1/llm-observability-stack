@@ -195,6 +195,10 @@ def make_run(index: int) -> Trace:
     # -- the answering call, also retried some of the time -----------------
     ans_in = rng.randint(*_IN_RANGE)
     ans_out = rng.randint(*_OUT_RANGE)
+    # A failed attempt carries its input tokens, and the truth bills them. That
+    # is the corpus's ASSUMPTION about a provider, not an observation: the
+    # SDK's overloaded error exposes no usage, and a real instrumentation
+    # would record none. README.md says so beside the dedupe figure.
     model_attempts = 2 if rng.random() < P_MODEL_RETRY else 1
     for attempt in range(1, model_attempts + 1):
         failed = attempt < model_attempts
